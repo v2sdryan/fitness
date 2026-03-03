@@ -1,6 +1,6 @@
-import type { AIProvider, BodyMetrics, MealEntry } from '../types';
+import type { AISettings, BodyMetrics, MealEntry } from '../types';
 
-// AI 服務：支援 Gemini 2.5 Flash 和 OpenRouter (Kimi K2.5)
+// AI 服務：優先用 Gemini，失敗自動 fallback 到 OpenRouter
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -11,7 +11,7 @@ async function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      resolve(result.split(',')[1]); // 去除 data:image/...;base64, 前綴
+      resolve(result.split(',')[1]);
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
@@ -59,6 +59,38 @@ async function callOpenRouter(apiKey: string, prompt: string, imageBase64?: stri
   return data.choices?.[0]?.message?.content || '';
 }
 
+// 帶自動 fallback 的 AI 呼叫：先 Gemini → 失敗則 OpenRouter
+async function callWithFallback(
+  settings: AISettings,
+  prompt: string,
+  imageBase64?: string,
+  mimeType?: string
+): Promise<{ text: string; usedProvider: 'gemini' | 'openrouter' }> {
+  // 先嘗試 Gemini
+  if (settings.geminiKey) {
+    try {
+      const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType);
+      return { text, usedProvider: 'gemini' };
+    } catch (geminiErr: any) {
+      console.warn('Gemini 失敗，嘗試 fallback 到 OpenRouter:', geminiErr.message);
+      // 如果有 OpenRouter key，繼續 fallback
+      if (settings.openrouterKey) {
+        const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+        return { text, usedProvider: 'openrouter' };
+      }
+      throw new Error(`Gemini 失敗: ${geminiErr.message}`);
+    }
+  }
+
+  // 沒有 Gemini key，直接用 OpenRouter
+  if (settings.openrouterKey) {
+    const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+    return { text, usedProvider: 'openrouter' };
+  }
+
+  throw new Error('請先在設定頁面填入至少一組 AI API Key');
+}
+
 // 從 AI 回應中提取 JSON
 function extractJSON(text: string): any {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -68,8 +100,8 @@ function extractJSON(text: string): any {
 
 // 分析體重秤截圖 → 提取身體數據
 export async function analyzeBodyMetrics(
-  provider: AIProvider, apiKey: string, imageFile: File
-): Promise<BodyMetrics> {
+  settings: AISettings, imageFile: File
+): Promise<{ data: BodyMetrics; usedProvider: string }> {
   const base64 = await fileToBase64(imageFile);
   const prompt = `你是健康數據分析專家。請分析這張體重秤/體脂磅截圖，提取所有可見的健康指數。
 請以嚴格 JSON 格式回傳（不要其他文字），欄位如下：
@@ -92,15 +124,14 @@ export async function analyzeBodyMetrics(
 }
 如果某項數據無法從圖片中讀取，請用合理的估算值填入。日期如果無法確定就用今天的日期。`;
 
-  const callAI = provider === 'gemini' ? callGemini : callOpenRouter;
-  const response = await callAI(apiKey, prompt, base64, imageFile.type);
-  return extractJSON(response) as BodyMetrics;
+  const { text, usedProvider } = await callWithFallback(settings, prompt, base64, imageFile.type);
+  return { data: extractJSON(text) as BodyMetrics, usedProvider };
 }
 
 // 分析食物照片 → 估算卡路里與營養素
 export async function analyzeFoodImage(
-  provider: AIProvider, apiKey: string, imageFile: File, mealType: string
-): Promise<MealEntry> {
+  settings: AISettings, imageFile: File, mealType: string
+): Promise<{ data: MealEntry; usedProvider: string }> {
   const base64 = await fileToBase64(imageFile);
   const prompt = `你是營養分析專家。請分析這張食物照片，辨識食物並估算卡路里與營養素。
 請以嚴格 JSON 格式回傳：
@@ -115,15 +146,14 @@ export async function analyzeFoodImage(
   "total_carbs_g": 數字
 }`;
 
-  const callAI = provider === 'gemini' ? callGemini : callOpenRouter;
-  const response = await callAI(apiKey, prompt, base64, imageFile.type);
-  return extractJSON(response) as MealEntry;
+  const { text, usedProvider } = await callWithFallback(settings, prompt, base64, imageFile.type);
+  return { data: extractJSON(text) as MealEntry, usedProvider };
 }
 
 // 分析文字描述的食物 → 估算卡路里
 export async function analyzeFoodText(
-  provider: AIProvider, apiKey: string, description: string, mealType: string
-): Promise<MealEntry> {
+  settings: AISettings, description: string, mealType: string
+): Promise<{ data: MealEntry; usedProvider: string }> {
   const prompt = `你是營養分析專家。用戶描述了他們吃的食物：「${description}」
 餐別：${mealType}
 請估算每項食物的卡路里與營養素，以嚴格 JSON 格式回傳：
@@ -138,7 +168,6 @@ export async function analyzeFoodText(
   "total_carbs_g": 數字
 }`;
 
-  const callAI = provider === 'gemini' ? callGemini : callOpenRouter;
-  const response = await callAI(apiKey, prompt);
-  return extractJSON(response) as MealEntry;
+  const { text, usedProvider } = await callWithFallback(settings, prompt);
+  return { data: extractJSON(text) as MealEntry, usedProvider };
 }

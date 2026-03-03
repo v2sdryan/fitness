@@ -88,8 +88,8 @@ export interface MacroTargets {
 // AI 提供者設定
 export type AIProvider = 'gemini' | 'openrouter';
 
-// AI 設定
+// AI 設定（兩組獨立 key，優先用 Gemini，失敗自動 fallback OpenRouter）
 export interface AISettings {
-  provider: AIProvider;
-  apiKey: string;
+  geminiKey: string;
+  openrouterKey: string;
 }

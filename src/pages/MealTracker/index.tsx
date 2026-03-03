@@ -4,7 +4,7 @@ import { getMealEntries, saveMealEntry, deleteMealEntry } from '../../services/f
 import { analyzeFoodImage, analyzeFoodText } from '../../services/ai';
 import { getToday, calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import type { MealEntry, AIProvider } from '../../types';
+import type { MealEntry, AISettings } from '../../types';
 
 const mealTypes = [
   { key: 'breakfast', label: '早餐', icon: 'light_mode', color: 'text-amber-500' },
@@ -26,8 +26,8 @@ export default function MealTracker() {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [aiSettings] = useLocalStorage<{ provider: AIProvider; apiKey: string }>('fittrack_ai', {
-    provider: 'gemini', apiKey: ''
+  const [aiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+    geminiKey: '', openrouterKey: ''
   });
   const [profile] = useLocalStorage('fittrack_profile', {
     age: 39, height_cm: 183, gender: 'male' as const, activityLevel: 'light'
@@ -66,12 +66,12 @@ export default function MealTracker() {
   };
 
   const handlePhotoUpload = async (file: File) => {
-    if (!aiSettings.apiKey) { setError('請先在設定頁面填入 AI API Key'); return; }
+    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     setLoading(true);
     setError('');
     try {
-      const result = await analyzeFoodImage(aiSettings.provider, aiSettings.apiKey, file, mealType);
-      setAiResult(result);
+      const { data } = await analyzeFoodImage(aiSettings, file, mealType);
+      setAiResult(data);
     } catch (err: any) {
       setError(err.message || 'AI 分析失敗');
     } finally {
@@ -80,13 +80,13 @@ export default function MealTracker() {
   };
 
   const handleTextAnalyze = async () => {
-    if (!aiSettings.apiKey) { setError('請先在設定頁面填入 AI API Key'); return; }
+    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!textInput.trim()) return;
     setLoading(true);
     setError('');
     try {
-      const result = await analyzeFoodText(aiSettings.provider, aiSettings.apiKey, textInput, mealType);
-      setAiResult(result);
+      const { data } = await analyzeFoodText(aiSettings, textInput, mealType);
+      setAiResult(data);
     } catch (err: any) {
       setError(err.message || 'AI 分析失敗');
     } finally {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
-import type { AIProvider } from '../../types';
+import type { AISettings } from '../../types';
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -14,9 +14,9 @@ export default function SettingsPage() {
     activityLevel: 'light',
   });
 
-  const [aiSettings, setAiSettings] = useLocalStorage<{ provider: AIProvider; apiKey: string }>('fittrack_ai', {
-    provider: 'gemini',
-    apiKey: '',
+  const [aiSettings, setAiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+    geminiKey: '',
+    openrouterKey: '',
   });
 
   const [saved, setSaved] = useState(false);
@@ -165,48 +165,52 @@ export default function SettingsPage() {
 
         {/* AI 設定 */}
         <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="font-bold mb-4 flex items-center gap-2">
+          <h3 className="font-bold mb-2 flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">auto_awesome</span> AI 分析設定
           </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-2">AI 提供者</label>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setAiSettings({ ...aiSettings, provider: 'gemini' })}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                    aiSettings.provider === 'gemini' ? 'bg-primary text-white shadow-md shadow-primary/20' : 'bg-slate-50 border border-slate-200'
-                  }`}
-                >
-                  Google Gemini 2.5 Flash
-                </button>
-                <button
-                  onClick={() => setAiSettings({ ...aiSettings, provider: 'openrouter' })}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                    aiSettings.provider === 'openrouter' ? 'bg-primary text-white shadow-md shadow-primary/20' : 'bg-slate-50 border border-slate-200'
-                  }`}
-                >
-                  OpenRouter (Kimi K2.5)
-                </button>
-              </div>
-            </div>
+          <p className="text-xs text-slate-400 mb-5">優先使用 Google Gemini，若失敗自動切換到 OpenRouter</p>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">
-                {aiSettings.provider === 'gemini' ? 'Google AI API Key' : 'OpenRouter API Key'}
-              </label>
+          <div className="space-y-5">
+            {/* Gemini Key */}
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">優先</span>
+                <label className="text-sm font-bold text-slate-700">Google Gemini 2.5 Flash</label>
+              </div>
               <input
                 type="password"
-                value={aiSettings.apiKey}
-                onChange={e => setAiSettings({ ...aiSettings, apiKey: e.target.value })}
-                placeholder={aiSettings.provider === 'gemini' ? '輸入 Google AI API Key' : '輸入 OpenRouter API Key'}
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                value={aiSettings.geminiKey}
+                onChange={e => setAiSettings({ ...aiSettings, geminiKey: e.target.value })}
+                placeholder="輸入 Google AI API Key"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
               />
-              <p className="text-xs text-slate-400 mt-2">
-                {aiSettings.provider === 'gemini'
-                  ? '前往 aistudio.google.com 取得 API Key'
-                  : '前往 openrouter.ai 取得 API Key'}
-              </p>
+              <p className="text-xs text-slate-400 mt-2">前往 aistudio.google.com 取得免費 API Key</p>
+              {aiSettings.geminiKey && (
+                <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">check_circle</span> 已設定
+                </p>
+              )}
+            </div>
+
+            {/* OpenRouter Key */}
+            <div className="p-4 rounded-xl bg-orange-50 border border-orange-100">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded">備用</span>
+                <label className="text-sm font-bold text-slate-700">OpenRouter (Kimi K2.5)</label>
+              </div>
+              <input
+                type="password"
+                value={aiSettings.openrouterKey}
+                onChange={e => setAiSettings({ ...aiSettings, openrouterKey: e.target.value })}
+                placeholder="輸入 OpenRouter API Key"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm"
+              />
+              <p className="text-xs text-slate-400 mt-2">前往 openrouter.ai 取得 API Key</p>
+              {aiSettings.openrouterKey && (
+                <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">check_circle</span> 已設定
+                </p>
+              )}
             </div>
           </div>
         </section>

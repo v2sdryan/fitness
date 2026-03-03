@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getExercises, saveExercise, deleteExercise, markExerciseComplete } from '../../services/firestore';
+import { getExercises, saveExercise, deleteExercise, toggleExerciseComplete } from '../../services/firestore';
 import { getToday } from '../../utils/calories';
 import type { ExerciseItem } from '../../types';
 
@@ -109,7 +109,7 @@ export default function ExercisePage() {
 
   const handleComplete = async (exercise: ExerciseItem) => {
     if (!user || !exercise.id) return;
-    await markExerciseComplete(user.uid, exercise.id, today);
+    await toggleExerciseComplete(user.uid, exercise.id, today);
     const updated = await getExercises(user.uid);
     setExercises(updated);
   };
@@ -118,7 +118,7 @@ export default function ExercisePage() {
     if (!user || !formName.trim()) return;
     const dur = customDuration ? parseInt(customDuration) : formDuration;
     const item: ExerciseItem = {
-      id: editItem?.id,
+      ...(editItem?.id ? { id: editItem.id } : {}),
       name: formName,
       icon: formIcon,
       frequency: formFreq,
@@ -270,14 +270,13 @@ export default function ExercisePage() {
                       </button>
                       <button
                         onClick={() => handleComplete(ex)}
-                        disabled={isCompletedToday}
                         className={`flex items-center justify-center px-4 h-9 rounded-lg text-sm font-bold transition-all shadow-md ${
                           isCompletedToday
-                            ? 'bg-emerald-500 text-white shadow-emerald-200'
+                            ? 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
                             : 'bg-primary text-white shadow-primary/20 hover:opacity-90'
                         }`}
                       >
-                        {isCompletedToday ? '已完成' : '完成'}
+                        {isCompletedToday ? '已完成 ✓' : '完成'}
                       </button>
                     </div>
                   </div>

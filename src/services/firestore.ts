@@ -55,12 +55,13 @@ export async function deleteMealEntry(userId: string, date: string, entryId: str
 
 // ===== 運動項目 =====
 export async function saveExercise(userId: string, item: ExerciseItem) {
-  if (item.id) {
-    await updateDoc(doc(db, 'users', userId, 'exercises', item.id), { ...item });
-    return item.id;
+  const { id, ...data } = item;
+  if (id) {
+    await updateDoc(doc(db, 'users', userId, 'exercises', id), data);
+    return id;
   }
   const ref = collection(db, 'users', userId, 'exercises');
-  const docRef = await addDoc(ref, item);
+  const docRef = await addDoc(ref, data);
   return docRef.id;
 }
 
@@ -74,15 +75,17 @@ export async function deleteExercise(userId: string, exerciseId: string) {
   await deleteDoc(doc(db, 'users', userId, 'exercises', exerciseId));
 }
 
-export async function markExerciseComplete(userId: string, exerciseId: string, date: string) {
+export async function toggleExerciseComplete(userId: string, exerciseId: string, date: string) {
   const ref = doc(db, 'users', userId, 'exercises', exerciseId);
   const snap = await getDoc(ref);
   if (snap.exists()) {
     const data = snap.data() as ExerciseItem;
-    const completed = data.completed || [];
-    if (!completed.includes(date)) {
+    let completed = data.completed || [];
+    if (completed.includes(date)) {
+      completed = completed.filter(d => d !== date);
+    } else {
       completed.push(date);
-      await updateDoc(ref, { completed });
     }
+    await updateDoc(ref, { completed });
   }
 }

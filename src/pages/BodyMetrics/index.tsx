@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getBodyMetricsRange, saveBodyMetrics, getLatestBodyMetrics } from '../../services/firestore';
 import { analyzeBodyMetrics } from '../../services/ai';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import type { BodyMetrics, AIProvider } from '../../types';
+import type { BodyMetrics, AISettings } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -20,8 +20,8 @@ export default function BodyMetricsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const [aiSettings] = useLocalStorage<{ provider: AIProvider; apiKey: string }>('fittrack_ai', {
-    provider: 'gemini', apiKey: ''
+  const [aiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+    geminiKey: '', openrouterKey: ''
   });
 
   useEffect(() => {
@@ -39,12 +39,12 @@ export default function BodyMetricsPage() {
   }
 
   const handleUpload = async (file: File) => {
-    if (!aiSettings.apiKey) { setError('請先在設定頁面填入 AI API Key'); return; }
+    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!user) return;
     setLoading(true);
     setError('');
     try {
-      const result = await analyzeBodyMetrics(aiSettings.provider, aiSettings.apiKey, file);
+      const { data: result } = await analyzeBodyMetrics(aiSettings, file);
       await saveBodyMetrics(user.uid, result);
       setLatest(result);
       const startDate = getStartDate(range);
