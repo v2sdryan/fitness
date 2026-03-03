@@ -13,7 +13,6 @@ const exerciseTemplates = [
   { name: '單車', icon: 'directions_bike', color: 'bg-sky-100 text-sky-600' },
 ];
 
-// 預設運動清單（復健/核心訓練）
 const PRESET_EXERCISES: Omit<ExerciseItem, 'id'>[] = [
   {
     name: 'Deadbugs (手腳鬥力推)',
@@ -54,6 +53,28 @@ const frequencyOptions = [2, 3, 4, 7];
 const durationOptions = [15, 30, 45, 60];
 const setsOptions = [1, 2, 3, 4];
 const repsOptions = [8, 10, 12, 15];
+const dayNames = '日一二三四五六';
+
+function getWeekDays(weekOffset: number): Date[] {
+  const now = new Date();
+  const sun = new Date(now);
+  sun.setDate(now.getDate() - now.getDay() + weekOffset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sun);
+    d.setDate(sun.getDate() + i);
+    return d;
+  });
+}
+
+function formatDate(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function formatWeekLabel(days: Date[]): string {
+  const s = days[0];
+  const e = days[6];
+  return `${s.getMonth() + 1}/${s.getDate()} - ${e.getMonth() + 1}/${e.getDate()}`;
+}
 
 export default function ExercisePage() {
   const { user } = useAuth();
@@ -62,6 +83,13 @@ export default function ExercisePage() {
   const [editItem, setEditItem] = useState<ExerciseItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement>(null);
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const today = getToday();
+  const [selectedDate, setSelectedDate] = useState(today);
+
+  const weekDays = getWeekDays(weekOffset);
+  const weekStart = formatDate(weekDays[0]);
 
   // 表單狀態
   const [formName, setFormName] = useState('');
@@ -74,19 +102,11 @@ export default function ExercisePage() {
   const [formNotes, setFormNotes] = useState('');
   const [customDuration, setCustomDuration] = useState('');
 
-  const today = getToday();
-  const thisWeekStart = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay());
-    return d.toISOString().split('T')[0];
-  })();
-
   useEffect(() => {
     if (!user) return;
     loadExercises();
   }, [user]);
 
-  // Scroll to form when shown
   useEffect(() => {
     if (showModal && formRef.current) {
       setTimeout(() => {
@@ -104,7 +124,6 @@ export default function ExercisePage() {
       }
       items = await getExercises(user.uid);
     } else {
-      // Dedup: keep first occurrence of each name, delete extras
       const seen = new Map<string, string>();
       const dupeIds: string[] = [];
       for (const item of items) {
@@ -124,14 +143,14 @@ export default function ExercisePage() {
     setExercises(items);
   };
 
-  const totalPlanned = exercises.reduce((s, e) => s + e.frequency, 0);
   const completedThisWeek = exercises.reduce((s, e) => {
-    return s + (e.completed || []).filter(d => d >= thisWeekStart).length;
+    return s + (e.completed || []).filter(d => d >= weekStart).length;
   }, 0);
+  const totalPlanned = exercises.reduce((s, e) => s + e.frequency, 0);
 
   const handleComplete = async (exercise: ExerciseItem) => {
     if (!user || !exercise.id) return;
-    await toggleExerciseComplete(user.uid, exercise.id, today);
+    await toggleExerciseComplete(user.uid, exercise.id, selectedDate);
     const updated = await getExercises(user.uid);
     setExercises(updated);
   };
@@ -196,15 +215,33 @@ export default function ExercisePage() {
     return t?.color || 'bg-purple-100 text-purple-600';
   };
 
-  // 本週日曆
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + i);
-    return d;
-  });
-  const dayNames = '日一二三四五六';
+  const goBack = () => {
+    setWeekOffset(w => w - 1);
+    const prev = getWeekDays(weekOffset - 1);
+    setSelectedDate(formatDate(prev[0]));
+  };
+  const goForward = () => {
+    if (weekOffset >= 0) return;
+    setWeekOffset(w => w + 1);
+    const next = getWeekDays(weekOffset + 1);
+    // If going back to current week, select today
+    if (weekOffset + 1 === 0) {
+      setSelectedDate(today);
+    } else {
+      setSelectedDate(formatDate(next[0]));
+    }
+  };
+  const goToday = () => {
+    setWeekOffset(0);
+    setSelectedDate(today);
+  };
 
-  // Inline form component
+  const isCurrentWeek = weekOffset === 0;
+  const isFutureDate = selectedDate > today;
+
+  // Count completed on selected date
+  const completedOnSelected = exercises.filter(e => (e.completed || []).includes(selectedDate)).length;
+
   const renderForm = (
     <div ref={formRef} className="bg-white p-5 rounded-2xl shadow-xl border-2 border-primary/20">
       <div className="flex justify-between items-center mb-5">
@@ -367,74 +404,129 @@ export default function ExercisePage() {
       </header>
 
       <main className="max-w-2xl mx-auto w-full px-4 py-4 space-y-4 pb-24">
-        {/* 本週運動曆 (top) */}
-        <section className="bg-white p-4 rounded-2xl border border-primary/5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-sm">本週運動</h3>
-            <span className="text-xs text-slate-400">{completedThisWeek}/{totalPlanned} 已完成</span>
+        {/* 週曆導航 */}
+        <section className="bg-white rounded-2xl border border-primary/5 shadow-sm overflow-hidden">
+          {/* 週導航列 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            <button onClick={goBack} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+              <span className="material-symbols-outlined text-lg">chevron_left</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm">{formatWeekLabel(weekDays)}</span>
+              {!isCurrentWeek && (
+                <button onClick={goToday} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold">
+                  今天
+                </button>
+              )}
+            </div>
+            <button
+              onClick={goForward}
+              disabled={weekOffset >= 0}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                weekOffset >= 0 ? 'bg-slate-50 text-slate-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">chevron_right</span>
+            </button>
           </div>
-          <div className="grid grid-cols-7 gap-2">
+
+          {/* 7 日格子 */}
+          <div className="grid grid-cols-7 gap-0 px-2 py-3">
             {weekDays.map((d, i) => {
-              const ds = d.toISOString().split('T')[0];
+              const ds = formatDate(d);
               const isToday = ds === today;
-              const completedExercises = exercises.filter(e => (e.completed || []).includes(ds));
-              const hasExercise = completedExercises.length > 0;
-              const isPast = d < new Date() && !isToday;
+              const isSelected = ds === selectedDate;
+              const completedEx = exercises.filter(e => (e.completed || []).includes(ds));
+              const hasCompleted = completedEx.length > 0;
+              const allDone = hasCompleted && completedEx.length === exercises.length;
+
               return (
-                <div key={i} className={`flex flex-col items-center gap-1.5 ${!isPast && !isToday ? 'opacity-40' : ''}`}>
-                  <span className={`text-[10px] font-medium ${isToday ? 'text-primary font-bold' : 'text-slate-400'}`}>
+                <button
+                  key={i}
+                  onClick={() => setSelectedDate(ds)}
+                  className="flex flex-col items-center gap-1 py-1 transition-all"
+                >
+                  <span className={`text-[10px] font-medium ${isToday ? 'text-primary' : 'text-slate-400'}`}>
                     {dayNames[d.getDay()]}
                   </span>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                    isToday
-                      ? 'bg-primary/20 text-primary ring-2 ring-primary ring-offset-1'
-                      : hasExercise
-                        ? 'bg-emerald-100 text-emerald-600'
-                        : 'bg-slate-100 text-slate-300'
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                    isSelected
+                      ? 'bg-primary text-white shadow-md shadow-primary/30'
+                      : isToday
+                        ? 'bg-primary/15 text-primary ring-2 ring-primary/30'
+                        : hasCompleted
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'text-slate-400 hover:bg-slate-100'
                   }`}>
-                    <span className="material-symbols-outlined text-lg">
-                      {hasExercise ? 'check' : (isToday ? 'fitness_center' : 'remove')}
-                    </span>
+                    {d.getDate()}
                   </div>
-                </div>
+                  {/* Dots indicator */}
+                  <div className="flex gap-0.5 h-1.5">
+                    {hasCompleted ? (
+                      allDone ? (
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      ) : (
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      )
+                    ) : (
+                      <div className="w-1.5 h-1.5" />
+                    )}
+                  </div>
+                </button>
               );
             })}
+          </div>
+
+          {/* 週摘要 */}
+          <div className="px-4 pb-3 flex items-center justify-between">
+            <span className="text-xs text-slate-400">本週完成 {completedThisWeek}/{totalPlanned}</span>
+            {completedOnSelected > 0 && (
+              <span className="text-xs text-emerald-500 font-medium">
+                {selectedDate === today ? '今日' : `${selectedDate.slice(5)}`} 完成 {completedOnSelected}/{exercises.length} 項
+              </span>
+            )}
           </div>
         </section>
 
         {/* 運動清單 */}
         <section>
           <div className="flex items-center justify-between mb-3 px-1">
-            <h2 className="text-lg font-bold">今日運動清單</h2>
+            <h2 className="text-base font-bold">
+              {selectedDate === today ? '今日運動' : `${selectedDate.slice(5)} 運動`}
+            </h2>
             <button onClick={() => { resetForm(); setShowModal(true); }} className="flex items-center gap-1 text-primary text-sm font-bold hover:underline">
-              <span className="material-symbols-outlined text-sm">add</span> 新增計畫
+              <span className="material-symbols-outlined text-sm">add</span> 新增
             </button>
           </div>
           <div className="space-y-3">
-            {/* Add form at top of list */}
             {showModal && !editItem && renderForm}
 
             {exercises.map(ex => {
-              const completedCount = (ex.completed || []).filter(d => d >= thisWeekStart).length;
-              const isCompletedToday = (ex.completed || []).includes(today);
+              const completedCount = (ex.completed || []).filter(d => d >= weekStart).length;
+              const isCompletedOnDate = (ex.completed || []).includes(selectedDate);
               return (
                 <div key={ex.id}>
-                  <div className="rounded-2xl bg-white shadow-sm border border-primary/5 overflow-hidden">
-                    {/* 主要資訊列 */}
+                  <div className={`rounded-2xl bg-white shadow-sm border overflow-hidden transition-all ${
+                    isCompletedOnDate ? 'border-emerald-200 bg-emerald-50/30' : 'border-primary/5'
+                  }`}>
                     <div className="flex items-center justify-between gap-3 p-4">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${getExerciseColor(ex.icon)}`}>
-                          <span className="material-symbols-outlined text-2xl">{ex.icon}</span>
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                          isCompletedOnDate ? 'bg-emerald-100 text-emerald-600' : getExerciseColor(ex.icon)
+                        }`}>
+                          <span className="material-symbols-outlined text-2xl">
+                            {isCompletedOnDate ? 'check' : ex.icon}
+                          </span>
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-bold truncate">{ex.name}</p>
+                            <p className={`text-sm font-bold truncate ${isCompletedOnDate ? 'text-emerald-700' : ''}`}>{ex.name}</p>
                             <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary font-bold whitespace-nowrap">
                               {ex.frequency === 7 ? '每天' : `週${ex.frequency}次`}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-xs text-slate-500">{completedCount}/{ex.frequency}</span>
+                            <span className="text-xs text-slate-500">本週 {completedCount}/{ex.frequency}</span>
                             {(ex.sets || ex.reps) && (
                               <span className="text-xs text-slate-400">· {ex.sets || 2}組x{ex.reps || 10}下</span>
                             )}
@@ -452,20 +544,21 @@ export default function ExercisePage() {
                         >
                           <span className="material-symbols-outlined text-[16px]">delete</span>
                         </button>
-                        <button
-                          onClick={() => handleComplete(ex)}
-                          className={`flex items-center justify-center px-3 h-8 rounded-lg text-xs font-bold transition-all shadow-sm ${
-                            isCompletedToday
-                              ? 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
-                              : 'bg-primary text-white shadow-primary/20 hover:opacity-90'
-                          }`}
-                        >
-                          {isCompletedToday ? '已完成 ✓' : '完成'}
-                        </button>
+                        {!isFutureDate && (
+                          <button
+                            onClick={() => handleComplete(ex)}
+                            className={`flex items-center justify-center px-3 h-8 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                              isCompletedOnDate
+                                ? 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600'
+                                : 'bg-primary text-white shadow-primary/20 hover:opacity-90'
+                            }`}
+                          >
+                            {isCompletedOnDate ? '✓' : '完成'}
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* 刪除確認 */}
                     {confirmDelete === ex.id && (
                       <div className="px-4 pb-3 flex items-center gap-3 bg-red-50 border-t border-red-100">
                         <span className="text-sm text-red-600">確定刪除？</span>
@@ -484,7 +577,6 @@ export default function ExercisePage() {
                       </div>
                     )}
 
-                    {/* 備註區 */}
                     {ex.notes && (
                       <div className="px-4 pb-3 pt-0">
                         <div className="bg-slate-50 rounded-xl p-2.5 text-xs text-slate-500 whitespace-pre-line leading-relaxed">
@@ -495,7 +587,6 @@ export default function ExercisePage() {
                     )}
                   </div>
 
-                  {/* Edit form inline below this exercise */}
                   {showModal && editItem?.id === ex.id && (
                     <div className="mt-3">{renderForm}</div>
                   )}
