@@ -53,34 +53,34 @@ export default function Dashboard() {
   return (
     <div>
       {/* 頂部導航 */}
-      <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-white sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary p-2 rounded-lg text-white">
-            <span className="material-symbols-outlined block">monitor_weight</span>
+      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white sticky top-0 z-40">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="bg-primary p-1.5 rounded-lg text-white shrink-0">
+            <span className="material-symbols-outlined block text-xl">monitor_weight</span>
           </div>
-          <h2 className="text-lg font-bold tracking-tight">健康減重助手</h2>
+          <h2 className="text-base font-bold tracking-tight truncate">健康減重助手</h2>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
-            <span className="material-symbols-outlined">notifications</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-full transition-colors">
+            <span className="material-symbols-outlined text-xl">notifications</span>
           </button>
-          <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+          <div className="w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
             {user?.email?.[0]?.toUpperCase() || 'U'}
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
+      <main className="max-w-2xl mx-auto w-full px-4 py-4 space-y-4">
         {/* 歡迎訊息 */}
         <section>
-          <h1 className="text-3xl font-bold">{greeting}，{user?.email?.split('@')[0] || '用戶'}</h1>
-          <p className="text-slate-500 mt-1">{dateStr}</p>
+          <h1 className="text-2xl font-bold">{greeting}，{user?.email?.split('@')[0] || '用戶'}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{dateStr}</p>
         </section>
 
         {/* 卡路里圓形進度 */}
-        <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <section className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
           <div className="flex flex-col items-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-40 h-40">
               <svg className="w-full h-full" viewBox="0 0 192 192">
                 <circle cx="96" cy="96" r="80" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
                 <circle
@@ -105,7 +105,7 @@ export default function Dashboard() {
                 <span className="text-slate-500 text-xs">kcal</span>
               </div>
             </div>
-            <div className="grid grid-cols-3 w-full mt-8 pt-6 border-t border-slate-100 text-center">
+            <div className="grid grid-cols-3 w-full mt-5 pt-4 border-t border-slate-100 text-center">
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wider">已攝取</p>
                 <p className="text-lg font-bold">{totalCaloriesIn.toLocaleString()}</p>
