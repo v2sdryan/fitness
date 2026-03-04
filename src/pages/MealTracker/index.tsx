@@ -49,6 +49,7 @@ export default function MealTracker() {
   const [currentThumbnail, setCurrentThumbnail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -198,11 +199,23 @@ export default function MealTracker() {
           <h2 className="text-lg font-bold tracking-tight">飲食記錄</h2>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 text-primary">
+          <button
+            onClick={() => setShowCalendar(v => !v)}
+            className={`flex items-center justify-center rounded-lg h-10 w-10 ${showCalendar ? 'bg-primary text-white' : 'bg-primary/10 text-primary'}`}
+          >
             <span className="material-symbols-outlined">calendar_today</span>
           </button>
         </div>
       </header>
+
+      {/* 月曆彈出選週 */}
+      {showCalendar && (
+        <WeekCalendarPopup
+          selectedDate={selectedDate}
+          onSelect={(d) => { setSelectedDate(d); setShowCalendar(false); }}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
 
       <main className="max-w-2xl mx-auto w-full pb-32">
         {/* 日期選擇 */}
@@ -586,5 +599,116 @@ function MacroBar({ label, current, target }: { label: string; current: number; 
         <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
       </div>
     </div>
+  );
+}
+
+/* ===== 月曆選週彈出層 ===== */
+function WeekCalendarPopup({
+  selectedDate, onSelect, onClose,
+}: {
+  selectedDate: string;
+  onSelect: (date: string) => void;
+  onClose: () => void;
+}) {
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date(selectedDate);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const dayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+
+  // 產生當月日曆格
+  const calendarDays = () => {
+    const first = new Date(viewDate.year, viewDate.month, 1);
+    const startDay = first.getDay(); // 0=日
+    const daysInMonth = new Date(viewDate.year, viewDate.month + 1, 0).getDate();
+    const cells: (Date | null)[] = [];
+    for (let i = 0; i < startDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(viewDate.year, viewDate.month, d));
+    return cells;
+  };
+
+  const prevMonth = () => {
+    setViewDate(v => {
+      const m = v.month - 1;
+      return m < 0 ? { year: v.year - 1, month: 11 } : { year: v.year, month: m };
+    });
+  };
+
+  const nextMonth = () => {
+    setViewDate(v => {
+      const m = v.month + 1;
+      return m > 11 ? { year: v.year + 1, month: 0 } : { year: v.year, month: m };
+    });
+  };
+
+  const toStr = (d: Date) => d.toISOString().split('T')[0];
+  const today = getToday();
+
+  return (
+    <>
+      {/* 背景遮罩 */}
+      <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose} />
+
+      {/* 月曆面板 */}
+      <div className="fixed top-16 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm bg-white rounded-2xl shadow-2xl z-50 p-4">
+        {/* 月份導航 */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-lg">
+            <span className="material-symbols-outlined text-slate-600">chevron_left</span>
+          </button>
+          <span className="font-bold text-lg">{viewDate.year}年{viewDate.month + 1}月</span>
+          <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded-lg">
+            <span className="material-symbols-outlined text-slate-600">chevron_right</span>
+          </button>
+        </div>
+
+        {/* 星期標頭 */}
+        <div className="grid grid-cols-7 text-center mb-2">
+          {dayLabels.map(d => (
+            <span key={d} className="text-xs font-bold text-slate-400">{d}</span>
+          ))}
+        </div>
+
+        {/* 日期格 */}
+        <div className="grid grid-cols-7 gap-y-1 text-center">
+          {calendarDays().map((d, i) => {
+            if (!d) return <span key={`e-${i}`} />;
+            const ds = toStr(d);
+            const isSelected = ds === selectedDate;
+            const isToday = ds === today;
+            return (
+              <button
+                key={ds}
+                onClick={() => onSelect(ds)}
+                className={`h-9 w-9 mx-auto rounded-full text-sm font-medium transition-all
+                  ${isSelected ? 'bg-primary text-white shadow-md' : ''}
+                  ${isToday && !isSelected ? 'ring-2 ring-primary/40 text-primary font-bold' : ''}
+                  ${!isSelected && !isToday ? 'hover:bg-slate-100 text-slate-700' : ''}
+                `}
+              >
+                {d.getDate()}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 快捷鍵 */}
+        <div className="flex justify-center gap-3 mt-4 pt-3 border-t border-slate-100">
+          <button
+            onClick={() => onSelect(today)}
+            className="px-4 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-bold hover:bg-primary/20"
+          >
+            今日
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200"
+          >
+            關閉
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
