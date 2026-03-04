@@ -1,4 +1,4 @@
-import type { AISettings, BodyMetrics, MealEntry } from '../types';
+import type { AISettings, BodyMetrics, MealEntry, DailyDietAnalysis } from '../types';
 
 // AI 服務：優先用 Gemini，失敗自動 fallback 到 OpenRouter
 
@@ -172,4 +172,56 @@ export async function analyzeFoodText(
 
   const { text, usedProvider } = await callWithFallback(settings, prompt);
   return { data: extractJSON(text) as MealEntry, usedProvider };
+}
+
+// 每日飲食綜合 AI 分析
+export async function analyzeDailyDiet(
+  settings: AISettings,
+  meals: MealEntry[],
+  bodyMetrics: BodyMetrics | null,
+): Promise<{ data: DailyDietAnalysis; usedProvider: string }> {
+  const allFoods = meals.flatMap(m => m.items.map(i => `${i.name}（${i.calories}kcal, 蛋白質${i.protein_g}g, 脂肪${i.fat_g}g, 碳水${i.carbs_g}g, 纖維${i.fiber_g || 0}g, 鈉${i.sodium_mg || 0}mg）`));
+  const totalCal = meals.reduce((s, m) => s + m.total_calories, 0);
+  const totalProtein = meals.reduce((s, m) => s + m.total_protein_g, 0);
+  const totalFat = meals.reduce((s, m) => s + m.total_fat_g, 0);
+  const totalCarbs = meals.reduce((s, m) => s + m.total_carbs_g, 0);
+  const totalFiber = meals.reduce((s, m) => s + (m.total_fiber_g || 0), 0);
+
+  const bodyInfo = bodyMetrics
+    ? `用戶身體數據：體重 ${bodyMetrics.weight_kg}kg、體脂率 ${bodyMetrics.body_fat_pct}%、肌肉率 ${bodyMetrics.muscle_pct}%、BMI ${bodyMetrics.bmi}、基礎代謝 ${bodyMetrics.bmr_kcal}kcal、內臟脂肪指數 ${bodyMetrics.visceral_fat_index}、體水分 ${bodyMetrics.body_water_pct}%`
+    : '無身體數據';
+
+  const prompt = `你是專業營養師。請根據以下今日飲食記錄和身體數據，做一個全面的每日飲食分析。
+
+今日所有食物：
+${allFoods.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+今日總攝取：${totalCal}kcal、蛋白質${totalProtein}g、脂肪${totalFat}g、碳水${totalCarbs}g、纖維${totalFiber}g
+
+${bodyInfo}
+
+請根據食物種類，推估今日可能攝取到的微量營養素（維他命A、B群、C、D、E、鐵質、鈣質、鋅、鉀、鎂等），評估各項是否充足。
+再結合身體數據，給出綜合評分和飲食改善建議。
+
+請以嚴格 JSON 格式回傳（繁體中文）：
+{
+  "overall_score": 0到100的整數,
+  "summary": "一句話總結今日飲食",
+  "macro_balance": "宏量營養素均衡度分析（2-3句）",
+  "micronutrients": [
+    { "name": "維他命A", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "維他命B群", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "維他命C", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "維他命D", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "鐵質", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "鈣質", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "鋅", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "鉀", "status": "充足或不足或過量", "note": "簡短說明" },
+    { "name": "鎂", "status": "充足或不足或過量", "note": "簡短說明" }
+  ],
+  "recommendations": ["建議1", "建議2", "建議3", "建議4"]
+}`;
+
+  const { text, usedProvider } = await callWithFallback(settings, prompt);
+  return { data: extractJSON(text) as DailyDietAnalysis, usedProvider };
 }

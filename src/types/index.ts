@@ -86,6 +86,15 @@ export interface MacroTargets {
   sodium_mg: number;
 }
 
+// 每日飲食 AI 分析
+export interface DailyDietAnalysis {
+  overall_score: number;
+  summary: string;
+  macro_balance: string;
+  micronutrients: { name: string; status: '充足' | '不足' | '過量'; note: string }[];
+  recommendations: string[];
+}
+
 // AI 提供者設定
 export type AIProvider = 'gemini' | 'openrouter';
 

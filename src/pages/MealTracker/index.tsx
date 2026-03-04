@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getMealEntries, saveMealEntry, deleteMealEntry } from '../../services/firestore';
-import { analyzeFoodImage, analyzeFoodText } from '../../services/ai';
+import { getMealEntries, saveMealEntry, deleteMealEntry, getLatestBodyMetrics } from '../../services/firestore';
+import { analyzeFoodImage, analyzeFoodText, analyzeDailyDiet } from '../../services/ai';
 import { getToday, calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import type { MealEntry, AISettings } from '../../types';
+import type { MealEntry, AISettings, DailyDietAnalysis, BodyMetrics } from '../../types';
 
 const mealTypes = [
   { key: 'breakfast', label: '早餐', icon: 'light_mode', color: 'text-amber-500' },
@@ -50,6 +50,9 @@ export default function MealTracker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [bodyMetrics, setBodyMetrics] = useState<BodyMetrics | null>(null);
+  const [dailyAnalysis, setDailyAnalysis] = useState<DailyDietAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +69,8 @@ export default function MealTracker() {
   useEffect(() => {
     if (!user) return;
     getMealEntries(user.uid, selectedDate).then(setMeals).catch(() => {});
+    getLatestBodyMetrics(user.uid).then(setBodyMetrics).catch(() => {});
+    setDailyAnalysis(null);
   }, [user, selectedDate]);
 
   const totalCal = meals.reduce((s, m) => s + m.total_calories, 0);
@@ -164,6 +169,19 @@ export default function MealTracker() {
     if (!user) return;
     await deleteMealEntry(user.uid, selectedDate, entryId);
     setMeals(meals.filter(m => m.id !== entryId));
+  };
+
+  const handleDailyAnalysis = async () => {
+    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    setAnalysisLoading(true);
+    try {
+      const { data } = await analyzeDailyDiet(aiSettings, meals, bodyMetrics);
+      setDailyAnalysis(data);
+    } catch (err: any) {
+      setError(err.message || 'AI 分析失敗');
+    } finally {
+      setAnalysisLoading(false);
+    }
   };
 
   const openAddPanel = (mealKey: string) => {
@@ -353,6 +371,99 @@ export default function MealTracker() {
             );
           })}
         </div>
+
+        {/* 每日 AI 飲食分析 */}
+        {meals.length > 0 && (
+          <div className="mx-4 mt-8 mb-6">
+            {!dailyAnalysis && !analysisLoading && (
+              <button
+                onClick={handleDailyAnalysis}
+                className="w-full py-4 bg-gradient-to-r from-violet-500 to-primary text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined">psychology</span>
+                AI 分析今日飲食
+              </button>
+            )}
+
+            {analysisLoading && (
+              <div className="p-6 rounded-2xl bg-white border border-primary/10 text-center">
+                <div className="inline-block w-8 h-8 border-3 border-primary/20 border-t-primary rounded-full animate-spin mb-3" />
+                <p className="text-sm text-slate-500">AI 正在分析你今日嘅飲食...</p>
+              </div>
+            )}
+
+            {dailyAnalysis && (
+              <div className="rounded-2xl bg-white border border-primary/10 overflow-hidden shadow-sm">
+                {/* 標題 + 評分 */}
+                <div className="bg-gradient-to-r from-violet-500 to-primary p-4 text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined">psychology</span>
+                      <span className="font-bold">每日飲食分析</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-3xl font-bold">{dailyAnalysis.overall_score}</span>
+                      <span className="text-xs opacity-80">/ 100</span>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm opacity-90">{dailyAnalysis.summary}</p>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  {/* 宏量營養素均衡度 */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-1">宏量營養素均衡度</h4>
+                    <p className="text-sm text-slate-700 leading-relaxed">{dailyAnalysis.macro_balance}</p>
+                  </div>
+
+                  {/* 微量營養素狀態 */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">微量營養素</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      {dailyAnalysis.micronutrients.map((mn, i) => (
+                        <div key={i} className="flex items-start gap-2 text-sm">
+                          <span className={`shrink-0 mt-0.5 w-2 h-2 rounded-full ${
+                            mn.status === '充足' ? 'bg-emerald-500' : mn.status === '不足' ? 'bg-red-400' : 'bg-yellow-400'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{mn.name}</span>
+                            <span className={`ml-1 text-xs px-1.5 py-0.5 rounded ${
+                              mn.status === '充足' ? 'bg-emerald-50 text-emerald-600'
+                                : mn.status === '不足' ? 'bg-red-50 text-red-500'
+                                : 'bg-yellow-50 text-yellow-600'
+                            }`}>{mn.status}</span>
+                            <span className="text-slate-400 ml-1">{mn.note}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 建議 */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">飲食建議</h4>
+                    <ul className="space-y-2">
+                      {dailyAnalysis.recommendations.map((rec, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                          <span className="material-symbols-outlined text-primary text-base shrink-0 mt-0.5">tips_and_updates</span>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* 重新分析 */}
+                  <button
+                    onClick={handleDailyAnalysis}
+                    className="w-full py-2 text-sm text-primary font-medium bg-primary/5 rounded-lg hover:bg-primary/10 transition-colors"
+                  >
+                    重新分析
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* 底部營養素追蹤 */}
