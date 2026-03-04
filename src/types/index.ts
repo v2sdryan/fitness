@@ -48,6 +48,7 @@ export interface MealEntry {
   total_fat_g: number;
   total_carbs_g: number;
   total_fiber_g?: number;
+  thumbnail?: string; // base64 縮圖
   timestamp: string;
 }
 

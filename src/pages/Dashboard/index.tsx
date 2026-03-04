@@ -29,6 +29,7 @@ export default function Dashboard() {
   const totalProtein = meals.reduce((s, m) => s + m.total_protein_g, 0);
   const totalFat = meals.reduce((s, m) => s + m.total_fat_g, 0);
   const totalCarbs = meals.reduce((s, m) => s + m.total_carbs_g, 0);
+  const totalFiber = meals.reduce((s, m) => s + (m.total_fiber_g || 0), 0);
 
   // 進度環計算
   const circumference = 2 * Math.PI * 80;
@@ -142,6 +143,7 @@ export default function Dashboard() {
               <NutrientBar label="蛋白質" current={totalProtein} target={macros.protein_g} color="bg-primary" />
               <NutrientBar label="脂肪" current={totalFat} target={macros.fat_g} color="bg-warning" />
               <NutrientBar label="碳水" current={totalCarbs} target={macros.carbs_g} color="bg-danger" />
+              <NutrientBar label="纖維" current={totalFiber} target={macros.fiber_g} color="bg-emerald-500" />
             </div>
           </div>
 

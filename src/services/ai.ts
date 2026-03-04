@@ -143,7 +143,8 @@ export async function analyzeFoodImage(
   "total_calories": 數字,
   "total_protein_g": 數字,
   "total_fat_g": 數字,
-  "total_carbs_g": 數字
+  "total_carbs_g": 數字,
+  "total_fiber_g": 數字
 }`;
 
   const { text, usedProvider } = await callWithFallback(settings, prompt, base64, imageFile.type);
@@ -165,7 +166,8 @@ export async function analyzeFoodText(
   "total_calories": 數字,
   "total_protein_g": 數字,
   "total_fat_g": 數字,
-  "total_carbs_g": 數字
+  "total_carbs_g": 數字,
+  "total_fiber_g": 數字
 }`;
 
   const { text, usedProvider } = await callWithFallback(settings, prompt);
