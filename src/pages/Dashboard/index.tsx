@@ -55,7 +55,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* 頂部導航 */}
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white sticky top-0 z-40">
+      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white sticky top-0 z-40" style={{ transform: 'translateZ(0)' }}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="bg-primary p-1.5 rounded-lg text-white shrink-0">
             <span className="material-symbols-outlined block text-xl">monitor_weight</span>

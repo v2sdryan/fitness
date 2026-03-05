@@ -211,7 +211,7 @@ export default function MealTracker() {
   return (
     <div>
       {/* 頂部導航 */}
-      <header className="flex items-center justify-between border-b border-primary/10 px-6 py-4 bg-white sticky top-0 z-40">
+      <header className="flex items-center justify-between border-b border-primary/10 px-6 py-4 bg-white sticky top-0 z-40" style={{ transform: 'translateZ(0)' }}>
         <div className="flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg text-white">
             <span className="material-symbols-outlined block">restaurant_menu</span>
@@ -238,7 +238,7 @@ export default function MealTracker() {
         />
       )}
 
-      <main className="max-w-2xl mx-auto w-full pb-32">
+      <main className="max-w-2xl mx-auto w-full pb-40">
         {/* 日期選擇 */}
         <div className="flex gap-3 p-4 overflow-x-auto hide-scrollbar whitespace-nowrap">
           {datePicker().map(d => {
@@ -470,7 +470,7 @@ export default function MealTracker() {
       </main>
 
       {/* 底部營養素追蹤 */}
-      <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-slate-100 p-4 pb-2 shadow-2xl z-40">
+      <div className="fixed left-0 right-0 bg-white border-t border-slate-100 p-4 pb-2 shadow-2xl z-40 bottom-[calc(4rem+env(safe-area-inset-bottom))]" style={{ transform: 'translateZ(0)' }}>
         <div className="max-w-2xl mx-auto grid grid-cols-2 gap-x-8 gap-y-3">
           <MacroBar label="蛋白質" current={totalProtein} target={macros.protein_g} />
           <MacroBar label="脂肪" current={totalFat} target={macros.fat_g} />

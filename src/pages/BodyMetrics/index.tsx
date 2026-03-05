@@ -241,7 +241,7 @@ export default function BodyMetricsPage() {
 
   return (
     <div>
-      <header className="sticky top-0 z-40 bg-background-light/80 backdrop-blur-md border-b border-primary/10 px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-background-light/80 backdrop-blur-md border-b border-primary/10 px-6 py-4 flex items-center justify-between" style={{ transform: 'translateZ(0)' }}>
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-2xl">monitoring</span>
           <h1 className="text-xl font-bold tracking-tight">身體數據趨勢</h1>
