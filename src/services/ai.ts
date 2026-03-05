@@ -59,6 +59,13 @@ async function callOpenRouter(apiKey: string, prompt: string, imageBase64?: stri
   return data.choices?.[0]?.message?.content || '';
 }
 
+// 檢測是否為網絡連接錯誤
+function isNetworkError(err: any): boolean {
+  if (err instanceof TypeError) return true;
+  const msg = (err?.message || '').toLowerCase();
+  return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed') || msg.includes('load failed') || msg.includes('net::');
+}
+
 // 帶自動 fallback 的 AI 呼叫：先 Gemini → 失敗則 OpenRouter
 async function callWithFallback(
   settings: AISettings,
@@ -66,29 +73,36 @@ async function callWithFallback(
   imageBase64?: string,
   mimeType?: string
 ): Promise<{ text: string; usedProvider: 'gemini' | 'openrouter' }> {
-  // 先嘗試 Gemini
-  if (settings.geminiKey) {
-    try {
-      const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType);
-      return { text, usedProvider: 'gemini' };
-    } catch (geminiErr: any) {
-      console.warn('Gemini 失敗，嘗試 fallback 到 OpenRouter:', geminiErr.message);
-      // 如果有 OpenRouter key，繼續 fallback
-      if (settings.openrouterKey) {
-        const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
-        return { text, usedProvider: 'openrouter' };
+  try {
+    // 先嘗試 Gemini
+    if (settings.geminiKey) {
+      try {
+        const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType);
+        return { text, usedProvider: 'gemini' };
+      } catch (geminiErr: any) {
+        console.warn('Gemini 失敗，嘗試 fallback 到 OpenRouter:', geminiErr.message);
+        // 如果有 OpenRouter key，繼續 fallback
+        if (settings.openrouterKey) {
+          const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+          return { text, usedProvider: 'openrouter' };
+        }
+        throw geminiErr;
       }
-      throw new Error(`Gemini 失敗: ${geminiErr.message}`);
     }
-  }
 
-  // 沒有 Gemini key，直接用 OpenRouter
-  if (settings.openrouterKey) {
-    const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
-    return { text, usedProvider: 'openrouter' };
-  }
+    // 沒有 Gemini key，直接用 OpenRouter
+    if (settings.openrouterKey) {
+      const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+      return { text, usedProvider: 'openrouter' };
+    }
 
-  throw new Error('請先在設定頁面填入至少一組 AI API Key');
+    throw new Error('請先在設定頁面填入至少一組 AI API Key');
+  } catch (err: any) {
+    if (isNetworkError(err)) {
+      throw new Error('AI 分析失敗：無法連接到 AI 服務，請確認已連接 VPN 或檢查網絡連接');
+    }
+    throw err;
+  }
 }
 
 // 從 AI 回應中提取 JSON

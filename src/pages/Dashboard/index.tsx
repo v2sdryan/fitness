@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [latestMetrics, setLatestMetrics] = useState<BodyMetrics | null>(null);
   const [meals, setMeals] = useState<MealEntry[]>([]);
   const [exercises, setExercises] = useState<ExerciseItem[]>([]);
-  const [profile] = useLocalStorage('fittrack_profile', {
+  const [profile] = useLocalStorage(`fittrack_profile_${user!.uid}`, {
     age: 39, height_cm: 183, gender: 'male' as const, activityLevel: 'light'
   });
 
@@ -38,7 +38,7 @@ export default function Dashboard() {
   const dashOffset = circumference * (1 - progress);
 
   // 連續記錄天數（簡化版：從 localStorage）
-  const [streak] = useLocalStorage('fittrack_streak', 0);
+  const [streak] = useLocalStorage(`fittrack_streak_${user!.uid}`, 0);
 
   useEffect(() => {
     if (!user) return;

@@ -1,27 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { getLatestBodyMetrics } from '../../services/firestore';
 import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
-import type { AISettings } from '../../types';
+import type { AISettings, BodyMetrics } from '../../types';
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
 
-  const [profile, setProfile] = useLocalStorage('fittrack_profile', {
+  const [profile, setProfile] = useLocalStorage(`fittrack_profile_${user!.uid}`, {
     age: 39,
     height_cm: 183,
     gender: 'male' as 'male' | 'female',
     activityLevel: 'light',
   });
 
-  const [aiSettings, setAiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+  const [aiSettings, setAiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
     geminiKey: '',
     openrouterKey: '',
   });
 
   const [saved, setSaved] = useState(false);
+  const [latestMetrics, setLatestMetrics] = useState<BodyMetrics | null>(null);
 
-  const budget = calculateDailyBudget(94, profile.height_cm, profile.age, profile.gender, profile.activityLevel);
+  useEffect(() => {
+    if (user) getLatestBodyMetrics(user.uid).then(setLatestMetrics).catch(() => {});
+  }, [user]);
+
+  const currentWeight = latestMetrics?.weight_kg || 94;
+  const budget = calculateDailyBudget(currentWeight, profile.height_cm, profile.age, profile.gender, profile.activityLevel);
   const macros = calculateMacroTargets(budget);
 
   const handleSave = () => {
@@ -143,6 +150,10 @@ export default function SettingsPage() {
           <h3 className="font-bold mb-4 text-primary flex items-center gap-2">
             <span className="material-symbols-outlined">calculate</span> 自動計算結果
           </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            根據最新體重 <span className="font-bold text-primary">{currentWeight} kg</span> 計算
+            {latestMetrics && <span className="text-slate-400 ml-1">（{latestMetrics.date}）</span>}
+          </p>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-xl">
               <p className="text-xs text-slate-500">每日卡路里預算</p>

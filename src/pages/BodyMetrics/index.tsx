@@ -39,8 +39,17 @@ export default function BodyMetricsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const [aiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+  const [aiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
     geminiKey: '', openrouterKey: ''
+  });
+
+  // 輸入模式：上傳截圖 or 手動輸入體重
+  const [inputMode, setInputMode] = useState<'upload' | 'manual'>('upload');
+  const [manualWeight, setManualWeight] = useState('');
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [manualTime, setManualTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   });
 
   // 預覽狀態
@@ -106,6 +115,42 @@ export default function BodyMetricsPage() {
     }
   };
 
+  // 手動輸入體重
+  const handleManualWeight = async () => {
+    if (!user || !manualWeight) return;
+    const w = parseFloat(manualWeight);
+    if (isNaN(w) || w <= 0) { setError('請輸入有效體重'); return; }
+    setLoading(true);
+    setError('');
+    setPreview(null);
+    setExcludedFields(new Set());
+    setIsDuplicate(false);
+    setDuplicateInfo('');
+
+    // 從 profile 讀取身高計算 BMI
+    const profileKey = `fittrack_profile_${user.uid}`;
+    const profileStr = localStorage.getItem(profileKey);
+    const profile = profileStr ? JSON.parse(profileStr) : { height_cm: 183 };
+    const heightM = profile.height_cm / 100;
+    const bmi = Math.round((w / (heightM * heightM)) * 10) / 10;
+
+    const data: BodyMetrics = {
+      date: manualDate,
+      time: manualTime,
+      weight_kg: w,
+      body_fat_pct: 0, muscle_pct: 0, visceral_fat_index: 0,
+      bmr_kcal: 0, body_water_pct: 0, skeletal_muscle_pct: 0,
+      protein_pct: 0, bone_mass_kg: 0, bmi,
+      metabolic_age: 0, body_type: '', score: 0,
+    };
+
+    const { isDup, info } = await checkDuplicate(data);
+    setIsDuplicate(isDup);
+    setDuplicateInfo(info);
+    setPreview(data);
+    setLoading(false);
+  };
+
   // 確認儲存
   const handleConfirmSave = async () => {
     if (!user || !preview) return;
@@ -129,6 +174,7 @@ export default function BodyMetricsPage() {
       setExcludedFields(new Set());
       setDuplicateInfo('');
       setIsDuplicate(false);
+      setManualWeight('');
     } catch (err: any) {
       setError('儲存失敗');
     } finally {
@@ -142,6 +188,7 @@ export default function BodyMetricsPage() {
     setExcludedFields(new Set());
     setDuplicateInfo('');
     setIsDuplicate(false);
+    setManualWeight('');
     // 重設 file input
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -220,26 +267,97 @@ export default function BodyMetricsPage() {
           </div>
         </div>
 
-        {/* 上傳區域 */}
-        <div className="mb-6">
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { e.target.files?.[0] && handleUpload(e.target.files[0]); }} />
-          <div
-            onClick={() => !loading && !preview && fileRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center text-center transition-colors ${
-              preview ? 'border-slate-200 bg-slate-50 cursor-default' : 'border-primary/30 bg-primary/5 cursor-pointer hover:border-primary'
-            }`}
-          >
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
-              <span className="material-symbols-outlined text-3xl">photo_camera</span>
-            </div>
-            <h3 className="text-lg font-bold mb-1">{loading ? '分析中...' : preview ? '已分析完成' : '上傳體重秤截圖'}</h3>
-            <p className="text-sm text-slate-500">{preview ? '請確認以下數據後儲存' : 'AI 將自動識別並紀錄數據'}</p>
-            {!preview && (
-              <button className="mt-4 px-6 py-2 bg-primary text-white rounded-full font-semibold text-sm">
-                {loading ? '處理中...' : '點擊上傳'}
-              </button>
-            )}
+        {/* 輸入模式選擇 */}
+        <div className="mb-4">
+          <div className="flex bg-primary/5 p-1 rounded-xl">
+            <button
+              onClick={() => setInputMode('upload')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1 ${
+                inputMode === 'upload' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">photo_camera</span>
+              上傳截圖
+            </button>
+            <button
+              onClick={() => setInputMode('manual')}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-1 ${
+                inputMode === 'manual' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">edit</span>
+              手動輸入體重
+            </button>
           </div>
+        </div>
+
+        {/* 上傳區域 / 手動輸入 */}
+        <div className="mb-6">
+          {inputMode === 'upload' ? (
+            <>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { e.target.files?.[0] && handleUpload(e.target.files[0]); }} />
+              <div
+                onClick={() => !loading && !preview && fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center text-center transition-colors ${
+                  preview ? 'border-slate-200 bg-slate-50 cursor-default' : 'border-primary/30 bg-primary/5 cursor-pointer hover:border-primary'
+                }`}
+              >
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
+                  <span className="material-symbols-outlined text-3xl">photo_camera</span>
+                </div>
+                <h3 className="text-lg font-bold mb-1">{loading ? '分析中...' : preview ? '已分析完成' : '上傳體重秤截圖'}</h3>
+                <p className="text-sm text-slate-500">{preview ? '請確認以下數據後儲存' : 'AI 將自動識別並紀錄數據'}</p>
+                {!preview && (
+                  <button className="mt-4 px-6 py-2 bg-primary text-white rounded-full font-semibold text-sm">
+                    {loading ? '處理中...' : '點擊上傳'}
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="border-2 border-dashed rounded-2xl p-6 border-primary/30 bg-primary/5">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1">體重 (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={manualWeight}
+                    onChange={e => setManualWeight(e.target.value)}
+                    placeholder="輸入體重，例如 92.5"
+                    className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary text-2xl font-bold text-center"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">日期</label>
+                    <input
+                      type="date"
+                      value={manualDate}
+                      onChange={e => setManualDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">時間</label>
+                    <input
+                      type="time"
+                      value={manualTime}
+                      onChange={e => setManualTime(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleManualWeight}
+                  disabled={loading || !manualWeight}
+                  className="w-full py-3 bg-primary text-white rounded-full font-semibold text-sm disabled:opacity-50"
+                >
+                  {loading ? '處理中...' : '記錄體重'}
+                </button>
+              </div>
+            </div>
+          )}
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         </div>
 
@@ -248,8 +366,8 @@ export default function BodyMetricsPage() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-primary/10 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-lg flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">auto_awesome</span>
-                AI 分析結果
+                <span className="material-symbols-outlined text-primary">{inputMode === 'manual' ? 'edit' : 'auto_awesome'}</span>
+                {inputMode === 'manual' ? '體重記錄預覽' : 'AI 分析結果'}
               </h3>
               <button onClick={handleCancelPreview} className="text-slate-400 hover:text-slate-600">
                 <span className="material-symbols-outlined">close</span>
@@ -283,9 +401,31 @@ export default function BodyMetricsPage() {
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-medium text-slate-600 min-w-[100px]">{label}</span>
-                      <span className={`font-bold ${isExcluded ? 'line-through text-slate-400' : ''}`}>
-                        {value}{unit && ` ${unit}`}
-                      </span>
+                      {key === 'date' ? (
+                        <input
+                          type="date"
+                          value={preview.date}
+                          onChange={async e => {
+                            const updated = { ...preview, date: e.target.value };
+                            setPreview(updated);
+                            const { isDup, info } = await checkDuplicate(updated);
+                            setIsDuplicate(isDup);
+                            setDuplicateInfo(info);
+                          }}
+                          className="font-bold bg-transparent border-b border-primary/30 focus:outline-none focus:border-primary px-1"
+                        />
+                      ) : key === 'time' ? (
+                        <input
+                          type="time"
+                          value={preview.time}
+                          onChange={e => setPreview({ ...preview, time: e.target.value })}
+                          className="font-bold bg-transparent border-b border-primary/30 focus:outline-none focus:border-primary px-1"
+                        />
+                      ) : (
+                        <span className={`font-bold ${isExcluded ? 'line-through text-slate-400' : ''}`}>
+                          {value}{unit && ` ${unit}`}
+                        </span>
+                      )}
                     </div>
                     {!isRequired && (
                       <button
@@ -474,7 +614,7 @@ export default function BodyMetricsPage() {
         {metrics.length === 0 && !loading && (
           <div className="text-center py-12 text-slate-400">
             <span className="material-symbols-outlined text-5xl mb-4 block">monitoring</span>
-            <p>尚無數據，請上傳體重秤截圖開始追蹤</p>
+            <p>尚無數據，請上傳體重秤截圖或手動輸入體重開始追蹤</p>
           </div>
         )}
       </div>

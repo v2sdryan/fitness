@@ -58,14 +58,14 @@ export default function MealTracker() {
   const fileRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  const [aiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
+  const [aiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
     geminiKey: '', openrouterKey: ''
   });
-  const [profile] = useLocalStorage('fittrack_profile', {
+  const [profile] = useLocalStorage(`fittrack_profile_${user!.uid}`, {
     age: 39, height_cm: 183, gender: 'male' as const, activityLevel: 'light'
   });
 
-  const budget = calculateDailyBudget(94, profile.height_cm, profile.age, profile.gender, profile.activityLevel);
+  const budget = calculateDailyBudget(bodyMetrics?.weight_kg || 94, profile.height_cm, profile.age, profile.gender, profile.activityLevel);
   const macros = calculateMacroTargets(budget);
 
   useEffect(() => {
