@@ -3,7 +3,12 @@ import type { AISettings, BodyMetrics, MealEntry, DailyDietAnalysis } from '../t
 // AI 服務：優先用 Gemini，失敗自動 fallback 到 OpenRouter
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+function getGeminiUrl(model?: string): string {
+  const m = model || 'gemini-2.5-flash';
+  return `${GEMINI_BASE_URL}/${m}:generateContent`;
+}
 
 // 將圖片檔案轉為 base64
 async function fileToBase64(file: File): Promise<string> {
@@ -19,12 +24,12 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 // 呼叫 Gemini API
-async function callGemini(apiKey: string, prompt: string, imageBase64?: string, mimeType?: string) {
+async function callGemini(apiKey: string, prompt: string, imageBase64?: string, mimeType?: string, model?: string) {
   const parts: any[] = [{ text: prompt }];
   if (imageBase64 && mimeType) {
     parts.unshift({ inline_data: { mime_type: mimeType, data: imageBase64 } });
   }
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+  const res = await fetch(`${getGeminiUrl(model)}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts }] }),
@@ -77,7 +82,7 @@ async function callWithFallback(
     // 先嘗試 Gemini
     if (settings.geminiKey) {
       try {
-        const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType);
+        const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType, settings.geminiModel);
         return { text, usedProvider: 'gemini' };
       } catch (geminiErr: any) {
         console.warn('Gemini 失敗，嘗試 fallback 到 OpenRouter:', geminiErr.message);

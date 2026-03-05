@@ -186,8 +186,33 @@ export default function SettingsPage() {
             <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">優先</span>
-                <label className="text-sm font-bold text-slate-700">Google Gemini 2.5 Flash</label>
+                <label className="text-sm font-bold text-slate-700">Google Gemini</label>
               </div>
+
+              {/* 模型選擇 */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-slate-500 mb-1.5">選擇模型</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: '穩定快速' },
+                    { key: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite', desc: '最新預覽' },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setAiSettings({ ...aiSettings, geminiModel: opt.key as any })}
+                      className={`p-2.5 rounded-lg text-left transition-all ${
+                        (aiSettings.geminiModel || 'gemini-2.5-flash') === opt.key
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'bg-white border border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      <p className="text-xs font-bold">{opt.label}</p>
+                      <p className={`text-[10px] ${(aiSettings.geminiModel || 'gemini-2.5-flash') === opt.key ? 'text-blue-100' : 'text-slate-400'}`}>{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <input
                 type="password"
                 value={aiSettings.geminiKey}

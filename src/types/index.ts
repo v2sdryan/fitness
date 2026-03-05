@@ -98,8 +98,12 @@ export interface DailyDietAnalysis {
 // AI 提供者設定
 export type AIProvider = 'gemini' | 'openrouter';
 
+// Gemini 模型選項
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-3.1-flash-lite-preview';
+
 // AI 設定（兩組獨立 key，優先用 Gemini，失敗自動 fallback OpenRouter）
 export interface AISettings {
   geminiKey: string;
   openrouterKey: string;
+  geminiModel?: GeminiModel;
 }
