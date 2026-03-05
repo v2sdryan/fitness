@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMealEntries, saveMealEntry, deleteMealEntry, getLatestBodyMetrics } from '../../services/firestore';
 import { analyzeFoodImage, analyzeFoodText, analyzeDailyDiet } from '../../services/ai';
-import { getToday, calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
+import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
+import { useToday } from '../../hooks/useToday';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import type { MealEntry, AISettings, DailyDietAnalysis, BodyMetrics } from '../../types';
 
@@ -38,8 +39,9 @@ async function createThumbnail(file: File): Promise<string> {
 
 export default function MealTracker() {
   const { user } = useAuth();
+  const today = useToday();
   const [meals, setMeals] = useState<MealEntry[]>([]);
-  const [selectedDate, setSelectedDate] = useState(getToday());
+  const [selectedDate, setSelectedDate] = useState(today);
   const [addingForMeal, setAddingForMeal] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<'photo' | 'text'>('photo');
   const [mealType, setMealType] = useState<string>('lunch');
@@ -230,6 +232,7 @@ export default function MealTracker() {
       {showCalendar && (
         <WeekCalendarPopup
           selectedDate={selectedDate}
+          today={today}
           onSelect={(d) => { setSelectedDate(d); setShowCalendar(false); }}
           onClose={() => setShowCalendar(false)}
         />
@@ -240,7 +243,7 @@ export default function MealTracker() {
         <div className="flex gap-3 p-4 overflow-x-auto hide-scrollbar whitespace-nowrap">
           {datePicker().map(d => {
             const ds = d.toISOString().split('T')[0];
-            const isToday = ds === getToday();
+            const isToday = ds === today;
             const isSelected = ds === selectedDate;
             return (
               <button
@@ -715,9 +718,10 @@ function MacroBar({ label, current, target }: { label: string; current: number; 
 
 /* ===== 月曆選週彈出層 ===== */
 function WeekCalendarPopup({
-  selectedDate, onSelect, onClose,
+  selectedDate, today, onSelect, onClose,
 }: {
   selectedDate: string;
+  today: string;
   onSelect: (date: string) => void;
   onClose: () => void;
 }) {
@@ -754,7 +758,6 @@ function WeekCalendarPopup({
   };
 
   const toStr = (d: Date) => d.toISOString().split('T')[0];
-  const today = getToday();
 
   return (
     <>

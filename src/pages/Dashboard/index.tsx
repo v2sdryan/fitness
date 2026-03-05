@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getLatestBodyMetrics, getMealEntries, getExercises } from '../../services/firestore';
-import { getToday, calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
+import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
+import { useToday } from '../../hooks/useToday';
 import type { BodyMetrics, MealEntry, ExerciseItem } from '../../types';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 
@@ -14,7 +15,7 @@ export default function Dashboard() {
     age: 39, height_cm: 183, gender: 'male' as const, activityLevel: 'light'
   });
 
-  const today = getToday();
+  const today = useToday();
   const weight = latestMetrics?.weight_kg || 94;
   const budget = calculateDailyBudget(weight, profile.height_cm, profile.age, profile.gender, profile.activityLevel);
   const macros = calculateMacroTargets(budget);

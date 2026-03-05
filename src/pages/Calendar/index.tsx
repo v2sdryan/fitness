@@ -3,12 +3,21 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getMealEntries, getBodyMetricsRange } from '../../services/firestore';
 import { calculateDailyBudget } from '../../utils/calories';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useToday } from '../../hooks/useToday';
 import type { MealEntry, BodyMetrics } from '../../types';
 
 export default function CalendarPage() {
   const { user } = useAuth();
+  const today = useToday();
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
+
+  // 午夜過後自動跳到新的月份
+  useEffect(() => {
+    const d = new Date(today);
+    setYear(d.getFullYear());
+    setMonth(d.getMonth());
+  }, [today]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dailyData, setDailyData] = useState<Record<string, { meals: MealEntry[]; weight?: number; totalCal: number }>>({});
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
@@ -150,6 +159,7 @@ export default function CalendarPage() {
                       const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                       const status = getStatus(ds);
                       const isSelected = ds === selectedDate;
+                      const isToday = ds === today;
                       const data = dailyData[ds];
                       return (
                         <div
@@ -157,9 +167,9 @@ export default function CalendarPage() {
                           onClick={() => setSelectedDate(ds)}
                           className={`bg-white h-20 p-2 flex flex-col justify-between cursor-pointer hover:bg-primary/5 transition-colors ${
                             isSelected ? 'ring-2 ring-primary ring-inset bg-primary/5' : ''
-                          }`}
+                          } ${isToday && !isSelected ? 'ring-2 ring-primary/30 ring-inset' : ''}`}
                         >
-                          <span className={`text-sm font-semibold ${isSelected ? 'text-primary font-bold' : ''}`}>{day}</span>
+                          <span className={`text-sm font-semibold ${isSelected ? 'text-primary font-bold' : ''} ${isToday ? 'text-primary' : ''}`}>{day}{isToday ? ' 今' : ''}</span>
                           <div className="flex flex-col items-center">
                             <div className={`w-2 h-2 rounded-full ${statusColors[status]} mb-1`} />
                             {data?.weight && <span className="text-[10px] text-slate-500">{data.weight}kg</span>}

@@ -29,6 +29,15 @@ export async function getBodyMetricsRange(userId: string, startDate?: string): P
   return snap.docs.map(d => d.data() as BodyMetrics);
 }
 
+export async function deleteBodyMetrics(userId: string, date: string) {
+  await deleteDoc(doc(db, 'users', userId, 'bodyMetrics', date));
+}
+
+export async function getBodyMetricsByDate(userId: string, date: string): Promise<BodyMetrics | null> {
+  const snap = await getDoc(doc(db, 'users', userId, 'bodyMetrics', date));
+  return snap.exists() ? (snap.data() as BodyMetrics) : null;
+}
+
 export async function getLatestBodyMetrics(userId: string): Promise<BodyMetrics | null> {
   const ref = collection(db, 'users', userId, 'bodyMetrics');
   const q = query(ref, orderBy('date', 'desc'));

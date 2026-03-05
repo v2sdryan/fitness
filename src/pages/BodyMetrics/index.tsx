@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getBodyMetricsRange, saveBodyMetrics, getLatestBodyMetrics } from '../../services/firestore';
+import { getBodyMetricsRange, saveBodyMetrics, getLatestBodyMetrics, getBodyMetricsByDate, deleteBodyMetrics } from '../../services/firestore';
 import { analyzeBodyMetrics } from '../../services/ai';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import type { BodyMetrics, AISettings } from '../../types';
@@ -11,6 +11,25 @@ import {
 } from 'recharts';
 
 type TimeRange = '7d' | '30d' | '90d' | 'all';
+
+// 用於預覽的資料欄位定義
+const METRIC_FIELDS: { key: keyof BodyMetrics; label: string; unit: string }[] = [
+  { key: 'date', label: '日期', unit: '' },
+  { key: 'time', label: '時間', unit: '' },
+  { key: 'weight_kg', label: '體重', unit: 'kg' },
+  { key: 'body_fat_pct', label: '體脂率', unit: '%' },
+  { key: 'muscle_pct', label: '肌肉率', unit: '%' },
+  { key: 'visceral_fat_index', label: '內臟脂肪指數', unit: '' },
+  { key: 'bmr_kcal', label: '基礎代謝', unit: 'kcal' },
+  { key: 'body_water_pct', label: '體水分', unit: '%' },
+  { key: 'skeletal_muscle_pct', label: '骨骼肌率', unit: '%' },
+  { key: 'protein_pct', label: '蛋白質', unit: '%' },
+  { key: 'bone_mass_kg', label: '骨量', unit: 'kg' },
+  { key: 'bmi', label: 'BMI', unit: '' },
+  { key: 'metabolic_age', label: '代謝年齡', unit: '歲' },
+  { key: 'body_type', label: '體型', unit: '' },
+  { key: 'score', label: '評分', unit: '' },
+];
 
 export default function BodyMetricsPage() {
   const { user } = useAuth();
@@ -23,6 +42,12 @@ export default function BodyMetricsPage() {
   const [aiSettings] = useLocalStorage<AISettings>('fittrack_ai', {
     geminiKey: '', openrouterKey: ''
   });
+
+  // 預覽狀態
+  const [preview, setPreview] = useState<BodyMetrics | null>(null);
+  const [excludedFields, setExcludedFields] = useState<Set<keyof BodyMetrics>>(new Set());
+  const [isDuplicate, setIsDuplicate] = useState(false);
+  const [duplicateInfo, setDuplicateInfo] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -38,22 +63,113 @@ export default function BodyMetricsPage() {
     return d.toISOString().split('T')[0];
   }
 
+  // 檢查是否為重複數據
+  const checkDuplicate = async (data: BodyMetrics): Promise<{ isDup: boolean; info: string }> => {
+    if (!user) return { isDup: false, info: '' };
+    try {
+      const existing = await getBodyMetricsByDate(user.uid, data.date);
+      if (existing) {
+        // 同日同時間 → 完全重複
+        if (existing.time === data.time && existing.weight_kg === data.weight_kg) {
+          return { isDup: true, info: `已存在 ${data.date} ${data.time} 的完全相同記錄（體重 ${existing.weight_kg}kg），將不會重複輸入` };
+        }
+        // 同日但不同時間/數據 → 提示已有數據，讓用戶決定
+        return { isDup: false, info: `${data.date} 已有記錄（${existing.time}, ${existing.weight_kg}kg），儲存將覆蓋舊數據` };
+      }
+    } catch { /* no existing data */ }
+    return { isDup: false, info: '' };
+  };
+
   const handleUpload = async (file: File) => {
     if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!user) return;
     setLoading(true);
     setError('');
+    setPreview(null);
+    setExcludedFields(new Set());
+    setIsDuplicate(false);
+    setDuplicateInfo('');
     try {
       const { data: result } = await analyzeBodyMetrics(aiSettings, file);
-      await saveBodyMetrics(user.uid, result);
-      setLatest(result);
-      const startDate = getStartDate(range);
-      const updated = await getBodyMetricsRange(user.uid, startDate);
-      setMetrics(updated);
+
+      // 檢查重複
+      const { isDup, info } = await checkDuplicate(result);
+      setIsDuplicate(isDup);
+      setDuplicateInfo(info);
+
+      // 無論是否重複都先顯示預覽
+      setPreview(result);
     } catch (err: any) {
       setError(err.message || '分析失敗');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 確認儲存
+  const handleConfirmSave = async () => {
+    if (!user || !preview) return;
+    setLoading(true);
+    try {
+      // 將排除的欄位設為 0 或空字串
+      const dataToSave = { ...preview };
+      excludedFields.forEach(key => {
+        if (key === 'date' || key === 'time' || key === 'body_type') {
+          // 日期和時間不能排除
+        } else {
+          (dataToSave as any)[key] = 0;
+        }
+      });
+      await saveBodyMetrics(user.uid, dataToSave);
+      setLatest(dataToSave);
+      const startDate = getStartDate(range);
+      const updated = await getBodyMetricsRange(user.uid, startDate);
+      setMetrics(updated);
+      setPreview(null);
+      setExcludedFields(new Set());
+      setDuplicateInfo('');
+      setIsDuplicate(false);
+    } catch (err: any) {
+      setError('儲存失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 取消預覽
+  const handleCancelPreview = () => {
+    setPreview(null);
+    setExcludedFields(new Set());
+    setDuplicateInfo('');
+    setIsDuplicate(false);
+    // 重設 file input
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  // 切換排除欄位
+  const toggleExclude = (key: keyof BodyMetrics) => {
+    // 日期和時間是必須的，不能排除
+    if (key === 'date' || key === 'time') return;
+    setExcludedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // 刪除已儲存的歷史記錄
+  const handleDeleteMetrics = async (date: string) => {
+    if (!user) return;
+    try {
+      await deleteBodyMetrics(user.uid, date);
+      setMetrics(prev => prev.filter(m => m.date !== date));
+      if (latest?.date === date) {
+        const remaining = metrics.filter(m => m.date !== date);
+        setLatest(remaining.length > 0 ? remaining[remaining.length - 1] : null);
+      }
+    } catch {
+      setError('刪除失敗');
     }
   };
 
@@ -106,22 +222,111 @@ export default function BodyMetricsPage() {
 
         {/* 上傳區域 */}
         <div className="mb-6">
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(e.target.files[0])} />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { e.target.files?.[0] && handleUpload(e.target.files[0]); }} />
           <div
-            onClick={() => !loading && fileRef.current?.click()}
-            className="border-2 border-dashed border-primary/30 rounded-2xl bg-primary/5 p-8 flex flex-col items-center text-center cursor-pointer hover:border-primary transition-colors"
+            onClick={() => !loading && !preview && fileRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center text-center transition-colors ${
+              preview ? 'border-slate-200 bg-slate-50 cursor-default' : 'border-primary/30 bg-primary/5 cursor-pointer hover:border-primary'
+            }`}
           >
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-primary">
               <span className="material-symbols-outlined text-3xl">photo_camera</span>
             </div>
-            <h3 className="text-lg font-bold mb-1">{loading ? '分析中...' : '上傳體重秤截圖'}</h3>
-            <p className="text-sm text-slate-500">AI 將自動識別並紀錄數據</p>
-            <button className="mt-4 px-6 py-2 bg-primary text-white rounded-full font-semibold text-sm">
-              {loading ? '處理中...' : '點擊上傳'}
-            </button>
+            <h3 className="text-lg font-bold mb-1">{loading ? '分析中...' : preview ? '已分析完成' : '上傳體重秤截圖'}</h3>
+            <p className="text-sm text-slate-500">{preview ? '請確認以下數據後儲存' : 'AI 將自動識別並紀錄數據'}</p>
+            {!preview && (
+              <button className="mt-4 px-6 py-2 bg-primary text-white rounded-full font-semibold text-sm">
+                {loading ? '處理中...' : '點擊上傳'}
+              </button>
+            )}
           </div>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         </div>
+
+        {/* 預覽面板：AI 分析結果 + 刪除按鈕 */}
+        {preview && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-primary/10 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">auto_awesome</span>
+                AI 分析結果
+              </h3>
+              <button onClick={handleCancelPreview} className="text-slate-400 hover:text-slate-600">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* 重複提示 */}
+            {duplicateInfo && (
+              <div className={`p-3 rounded-xl mb-4 text-sm flex items-start gap-2 ${
+                isDuplicate ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+              }`}>
+                <span className="material-symbols-outlined text-base shrink-0 mt-0.5">
+                  {isDuplicate ? 'error' : 'warning'}
+                </span>
+                {duplicateInfo}
+              </div>
+            )}
+
+            {/* 數據列表 */}
+            <div className="space-y-2 mb-6">
+              {METRIC_FIELDS.map(({ key, label, unit }) => {
+                const value = preview[key];
+                const isExcluded = excludedFields.has(key);
+                const isRequired = key === 'date' || key === 'time';
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center justify-between p-3 rounded-xl transition-all ${
+                      isExcluded ? 'bg-slate-100 opacity-50' : 'bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-slate-600 min-w-[100px]">{label}</span>
+                      <span className={`font-bold ${isExcluded ? 'line-through text-slate-400' : ''}`}>
+                        {value}{unit && ` ${unit}`}
+                      </span>
+                    </div>
+                    {!isRequired && (
+                      <button
+                        onClick={() => toggleExclude(key)}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                          isExcluded
+                            ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                            : 'bg-red-100 text-red-600 hover:bg-red-200'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-sm">
+                          {isExcluded ? 'undo' : 'delete'}
+                        </span>
+                        {isExcluded ? '恢復' : '排除'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 操作按鈕 */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelPreview}
+                className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                取消
+              </button>
+              {!isDuplicate && (
+                <button
+                  onClick={handleConfirmSave}
+                  disabled={loading}
+                  className="flex-1 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/30 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {loading ? '儲存中...' : '確認儲存'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 最新測量數據 */}
         {latest && (
@@ -145,6 +350,39 @@ export default function BodyMetricsPage() {
               <MetricCard icon="water_drop" color="text-indigo-500" label="水分率" value={`${latest.body_water_pct}%`} badge={statusBadge(latest.body_water_pct, 50, 65)} />
               <MetricCard icon="local_fire_department" color="text-amber-500" label="內臟脂肪" value={latest.visceral_fat_index.toString()} badge={statusBadge(latest.visceral_fat_index, 0, 9)} />
               <MetricCard icon="bolt" color="text-purple-500" label="基礎代謝" value={latest.bmr_kcal.toString()} badge={statusBadge(latest.bmr_kcal, 1200, 2500)} />
+            </div>
+          </div>
+        )}
+
+        {/* 歷史記錄列表（帶刪除） */}
+        {metrics.length > 0 && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-primary/5 mb-6">
+            <h3 className="font-bold mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">history</span>
+              歷史記錄
+            </h3>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {[...metrics].reverse().map(m => (
+                <div key={m.date} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="font-bold text-sm">{m.date}</p>
+                      <p className="text-xs text-slate-400">{m.time}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">{m.weight_kg} kg</p>
+                      <p className="text-xs text-slate-400">BMI {m.bmi} / 體脂 {m.body_fat_pct}%</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMetrics(m.date)}
+                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="刪除此記錄"
+                  >
+                    <span className="material-symbols-outlined text-lg">delete</span>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
