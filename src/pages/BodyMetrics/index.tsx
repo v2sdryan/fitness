@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getBodyMetricsRange, saveBodyMetrics, getLatestBodyMetrics, getBodyMetricsByDate, deleteBodyMetrics } from '../../services/firestore';
-import { analyzeBodyMetrics } from '../../services/ai';
+import { analyzeBodyMetrics, hasConfiguredAI } from '../../services/ai';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import type { BodyMetrics, AISettings } from '../../types';
+import { DEFAULT_GEMINI_MODEL, type BodyMetrics, type AISettings } from '../../types';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -40,7 +40,7 @@ export default function BodyMetricsPage() {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [aiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
-    geminiKey: '', openrouterKey: ''
+    geminiKey: '', openrouterKey: '', geminiModel: DEFAULT_GEMINI_MODEL
   });
 
   // 輸入模式：上傳截圖 or 手動輸入體重
@@ -90,7 +90,7 @@ export default function BodyMetricsPage() {
   };
 
   const handleUpload = async (file: File) => {
-    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    if (!hasConfiguredAI(aiSettings)) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!user) return;
     setLoading(true);
     setError('');

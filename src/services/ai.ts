@@ -1,13 +1,31 @@
-import type { AISettings, BodyMetrics, MealEntry, DailyDietAnalysis } from '../types';
+import { DEFAULT_GEMINI_MODEL, type AISettings, type BodyMetrics, type MealEntry, type DailyDietAnalysis } from '../types';
 
 // AI 服務：優先用 Gemini，失敗自動 fallback 到 OpenRouter
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const VERCEL_GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim() || '';
+const VERCEL_OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || '';
 
-function getGeminiUrl(model?: string): string {
-  const m = model || 'gemini-2.5-flash';
-  return `${GEMINI_BASE_URL}/${m}:generateContent`;
+export function getEffectiveAISettings(settings: AISettings): AISettings {
+  return {
+    geminiKey: VERCEL_GEMINI_KEY || settings.geminiKey,
+    openrouterKey: VERCEL_OPENROUTER_KEY || settings.openrouterKey,
+    geminiModel: DEFAULT_GEMINI_MODEL,
+  };
+}
+
+export function hasConfiguredAI(settings: AISettings): boolean {
+  const effectiveSettings = getEffectiveAISettings(settings);
+  return Boolean(effectiveSettings.geminiKey || effectiveSettings.openrouterKey);
+}
+
+export function usesVercelGeminiKey(): boolean {
+  return Boolean(VERCEL_GEMINI_KEY);
+}
+
+function getGeminiUrl(): string {
+  return `${GEMINI_BASE_URL}/${DEFAULT_GEMINI_MODEL}:generateContent`;
 }
 
 // 將圖片檔案轉為 base64
@@ -24,12 +42,12 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 // 呼叫 Gemini API
-async function callGemini(apiKey: string, prompt: string, imageBase64?: string, mimeType?: string, model?: string) {
+async function callGemini(apiKey: string, prompt: string, imageBase64?: string, mimeType?: string) {
   const parts: any[] = [{ text: prompt }];
   if (imageBase64 && mimeType) {
     parts.unshift({ inline_data: { mime_type: mimeType, data: imageBase64 } });
   }
-  const res = await fetch(`${getGeminiUrl(model)}?key=${apiKey}`, {
+  const res = await fetch(`${getGeminiUrl()}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts }] }),
@@ -78,17 +96,19 @@ async function callWithFallback(
   imageBase64?: string,
   mimeType?: string
 ): Promise<{ text: string; usedProvider: 'gemini' | 'openrouter' }> {
+  const effectiveSettings = getEffectiveAISettings(settings);
+
   try {
     // 先嘗試 Gemini
-    if (settings.geminiKey) {
+    if (effectiveSettings.geminiKey) {
       try {
-        const text = await callGemini(settings.geminiKey, prompt, imageBase64, mimeType, settings.geminiModel);
+        const text = await callGemini(effectiveSettings.geminiKey, prompt, imageBase64, mimeType);
         return { text, usedProvider: 'gemini' };
       } catch (geminiErr: any) {
         console.warn('Gemini 失敗，嘗試 fallback 到 OpenRouter:', geminiErr.message);
         // 如果有 OpenRouter key，繼續 fallback
-        if (settings.openrouterKey) {
-          const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+        if (effectiveSettings.openrouterKey) {
+          const text = await callOpenRouter(effectiveSettings.openrouterKey, prompt, imageBase64, mimeType);
           return { text, usedProvider: 'openrouter' };
         }
         throw geminiErr;
@@ -96,8 +116,8 @@ async function callWithFallback(
     }
 
     // 沒有 Gemini key，直接用 OpenRouter
-    if (settings.openrouterKey) {
-      const text = await callOpenRouter(settings.openrouterKey, prompt, imageBase64, mimeType);
+    if (effectiveSettings.openrouterKey) {
+      const text = await callOpenRouter(effectiveSettings.openrouterKey, prompt, imageBase64, mimeType);
       return { text, usedProvider: 'openrouter' };
     }
 

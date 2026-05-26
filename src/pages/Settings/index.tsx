@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { getLatestBodyMetrics } from '../../services/firestore';
+import { usesVercelGeminiKey } from '../../services/ai';
 import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
-import type { AISettings, BodyMetrics } from '../../types';
+import { DEFAULT_GEMINI_MODEL, type AISettings, type BodyMetrics } from '../../types';
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -18,10 +19,12 @@ export default function SettingsPage() {
   const [aiSettings, setAiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
     geminiKey: '',
     openrouterKey: '',
+    geminiModel: DEFAULT_GEMINI_MODEL,
   });
 
   const [saved, setSaved] = useState(false);
   const [latestMetrics, setLatestMetrics] = useState<BodyMetrics | null>(null);
+  const hasVercelGeminiKey = usesVercelGeminiKey();
 
   useEffect(() => {
     if (user) getLatestBodyMetrics(user.uid).then(setLatestMetrics).catch(() => {});
@@ -179,7 +182,7 @@ export default function SettingsPage() {
           <h3 className="font-bold mb-2 flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">auto_awesome</span> AI 分析設定
           </h3>
-          <p className="text-xs text-slate-400 mb-5">優先使用 Google Gemini，若失敗自動切換到 OpenRouter</p>
+          <p className="text-xs text-slate-400 mb-5">優先使用 Vercel 的 Google Gemini API，若失敗自動切換到 OpenRouter</p>
 
           <div className="space-y-5">
             {/* Gemini Key */}
@@ -189,39 +192,30 @@ export default function SettingsPage() {
                 <label className="text-sm font-bold text-slate-700">Google Gemini</label>
               </div>
 
-              {/* 模型選擇 */}
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">選擇模型</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { key: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: '穩定快速' },
-                    { key: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite', desc: '最新預覽' },
-                  ].map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setAiSettings({ ...aiSettings, geminiModel: opt.key as any })}
-                      className={`p-2.5 rounded-lg text-left transition-all ${
-                        (aiSettings.geminiModel || 'gemini-2.5-flash') === opt.key
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-white border border-blue-200 hover:bg-blue-50'
-                      }`}
-                    >
-                      <p className="text-xs font-bold">{opt.label}</p>
-                      <p className={`text-[10px] ${(aiSettings.geminiModel || 'gemini-2.5-flash') === opt.key ? 'text-blue-100' : 'text-slate-400'}`}>{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
+              {/* 模型固定為 Gemini 3.5 Flash */}
+              <div className="mb-3 rounded-lg bg-white border border-blue-200 p-3">
+                <label className="block text-xs font-medium text-slate-500 mb-1">使用模型</label>
+                <p className="text-sm font-bold text-blue-700">Gemini 3.5 Flash</p>
+                <p className="text-[10px] text-slate-400">{DEFAULT_GEMINI_MODEL}</p>
               </div>
 
-              <input
-                type="password"
-                value={aiSettings.geminiKey}
-                onChange={e => setAiSettings({ ...aiSettings, geminiKey: e.target.value })}
-                placeholder="輸入 Google AI API Key"
-                className="w-full px-4 py-3 rounded-xl bg-white border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
-              />
-              <p className="text-xs text-slate-400 mt-2">前往 aistudio.google.com 取得免費 API Key</p>
-              {aiSettings.geminiKey && (
+              {hasVercelGeminiKey ? (
+                <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">check_circle</span> Vercel API Key 已連接
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="password"
+                    value={aiSettings.geminiKey}
+                    onChange={e => setAiSettings({ ...aiSettings, geminiKey: e.target.value })}
+                    placeholder="輸入 Google AI API Key"
+                    className="w-full px-4 py-3 rounded-xl bg-white border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                  />
+                  <p className="text-xs text-slate-400 mt-2">前往 aistudio.google.com 取得免費 API Key，或在 Vercel 設定 VITE_GEMINI_API_KEY</p>
+                </>
+              )}
+              {!hasVercelGeminiKey && aiSettings.geminiKey && (
                 <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">check_circle</span> 已設定
                 </p>

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMealEntries, saveMealEntry, deleteMealEntry, getLatestBodyMetrics } from '../../services/firestore';
-import { analyzeFoodImage, analyzeFoodText, analyzeDailyDiet } from '../../services/ai';
+import { analyzeFoodImage, analyzeFoodText, analyzeDailyDiet, hasConfiguredAI } from '../../services/ai';
 import { calculateDailyBudget, calculateMacroTargets } from '../../utils/calories';
 import { useToday } from '../../hooks/useToday';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import type { MealEntry, AISettings, DailyDietAnalysis, BodyMetrics } from '../../types';
+import { DEFAULT_GEMINI_MODEL, type MealEntry, type AISettings, type DailyDietAnalysis, type BodyMetrics } from '../../types';
 
 const mealTypes = [
   { key: 'breakfast', label: '早餐', icon: 'light_mode', color: 'text-amber-500' },
@@ -59,7 +59,7 @@ export default function MealTracker() {
   const galleryRef = useRef<HTMLInputElement>(null);
 
   const [aiSettings] = useLocalStorage<AISettings>(`fittrack_ai_${user!.uid}`, {
-    geminiKey: '', openrouterKey: ''
+    geminiKey: '', openrouterKey: '', geminiModel: DEFAULT_GEMINI_MODEL
   });
   const [profile] = useLocalStorage(`fittrack_profile_${user!.uid}`, {
     age: 39, height_cm: 183, gender: 'male' as const, activityLevel: 'light'
@@ -100,7 +100,7 @@ export default function MealTracker() {
   };
 
   const handlePhotoUpload = async (file: File) => {
-    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    if (!hasConfiguredAI(aiSettings)) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     setLoading(true);
     setError('');
     try {
@@ -118,7 +118,7 @@ export default function MealTracker() {
   };
 
   const handleTextAnalyze = async () => {
-    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    if (!hasConfiguredAI(aiSettings)) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!textInput.trim()) return;
     setLoading(true);
     setError('');
@@ -134,7 +134,7 @@ export default function MealTracker() {
 
   /** 用文字修正已有的分析結果 */
   const handleCorrectionAnalyze = async () => {
-    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    if (!hasConfiguredAI(aiSettings)) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     if (!correctionText.trim()) return;
     setLoading(true);
     setError('');
@@ -174,7 +174,7 @@ export default function MealTracker() {
   };
 
   const handleDailyAnalysis = async () => {
-    if (!aiSettings.geminiKey && !aiSettings.openrouterKey) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
+    if (!hasConfiguredAI(aiSettings)) { setError('請先在設定頁面填入至少一組 AI API Key'); return; }
     setAnalysisLoading(true);
     try {
       const { data } = await analyzeDailyDiet(aiSettings, meals, bodyMetrics);
