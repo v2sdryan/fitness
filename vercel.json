@@ -1,5 +1,11 @@
 {
+  "functions": {
+    "api/gemini.js": {
+      "maxDuration": 60,
+      "regions": ["iad1"]
+    }
+  },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

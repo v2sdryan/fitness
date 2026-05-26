@@ -4,24 +4,22 @@ import { DEFAULT_GEMINI_MODEL, type AISettings, type BodyMetrics, type MealEntry
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const VERCEL_GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim() || '';
 const VERCEL_OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || '';
 
 export function getEffectiveAISettings(settings: AISettings): AISettings {
   return {
-    geminiKey: VERCEL_GEMINI_KEY || settings.geminiKey,
+    geminiKey: settings.geminiKey,
     openrouterKey: VERCEL_OPENROUTER_KEY || settings.openrouterKey,
     geminiModel: DEFAULT_GEMINI_MODEL,
   };
 }
 
-export function hasConfiguredAI(settings: AISettings): boolean {
-  const effectiveSettings = getEffectiveAISettings(settings);
-  return Boolean(effectiveSettings.geminiKey || effectiveSettings.openrouterKey);
+export function hasConfiguredAI(_settings: AISettings): boolean {
+  return true;
 }
 
 export function usesVercelGeminiKey(): boolean {
-  return Boolean(VERCEL_GEMINI_KEY);
+  return true;
 }
 
 function getGeminiUrl(): string {
@@ -56,6 +54,18 @@ async function callGemini(apiKey: string, prompt: string, imageBase64?: string, 
   if (!res.ok) throw new Error(data.error?.message || 'Gemini API 錯誤');
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   return text;
+}
+
+// 呼叫 Vercel serverless API，避免由用戶瀏覽器直接打 Google 而觸發地區限制
+async function callVercelGemini(prompt: string, imageBase64?: string, mimeType?: string) {
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, imageBase64, mimeType }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Gemini API 錯誤');
+  return data.text || '';
 }
 
 // 呼叫 OpenRouter API
@@ -99,7 +109,15 @@ async function callWithFallback(
   const effectiveSettings = getEffectiveAISettings(settings);
 
   try {
-    // 先嘗試 Gemini
+    // 先嘗試 Vercel serverless Gemini，避免瀏覽器所在地限制
+    try {
+      const text = await callVercelGemini(prompt, imageBase64, mimeType);
+      return { text, usedProvider: 'gemini' };
+    } catch (serverGeminiErr: any) {
+      console.warn('Vercel Gemini 失敗，嘗試其他 API 設定:', serverGeminiErr.message);
+    }
+
+    // Vercel 未設定時，才嘗試用戶自行填入的 Gemini key
     if (effectiveSettings.geminiKey) {
       try {
         const text = await callGemini(effectiveSettings.geminiKey, prompt, imageBase64, mimeType);
